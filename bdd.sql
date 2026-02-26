@@ -178,3 +178,74 @@ CREATE TABLE Image (
     type TEXT NOT NULL, -- 'item', 'pnj', 'zone'
     ref_id INT NOT NULL -- id de l'item/pnj/zone
 );
+
+-- Date : 25/02/2026 15h45
+
+CREATE TYPE dialogue_type AS ENUM (
+	'monologue',
+	'question',
+	'answer_positive',
+	'answer_negative',
+	'answer_neutre',
+	'heart_two',
+	'heart_four',
+	'heart_six',
+	'heart_eight',
+	'heart_ten',
+	'heart_eleven',
+	'heart_twelve',
+	'heart_thirteen',
+	'heart_fourteen',
+	'event_spring',
+	'event_summer',
+	'event_fall',
+	'event_winter',
+	'greeting',
+	'rare',
+	'seasonal',
+	'weather'
+);
+
+CREATE TABLE Dialogue (
+	Id SERIAL PRIMARY KEY,
+	Type dialogue_type NOT NULL,
+	text TEXT NOT NULL,
+	answersGroupId INT NULL,
+	Pnj_id INT REFERENCES Pnj(Id) ON DELETE SET NULL
+)
+
+-- Date : 26/02/2026 11h07
+
+ALTER TABLE item
+    ALTER COLUMN zone TYPE TEXT[]
+    USING string_to_array(zone, ',');
+
+CREATE TABLE world_state (
+    id SERIAL PRIMARY KEY,
+    season TEXT NOT NULL,
+    weather TEXT NOT NULL,
+    last_weather_update TIMESTAMP NOT NULL,
+    last_season_update TIMESTAMP NOT NULL
+);
+
+ALTER TABLE item
+    RENAME COLUMN season TO season_enum;
+
+ALTER TABLE item
+    ADD COLUMN season TEXT[];
+
+UPDATE item
+SET season = ARRAY[season_enum::TEXT];
+
+ALTER TABLE item
+    DROP COLUMN season_enum;
+
+ALTER TABLE public."User"
+    ALTER COLUMN lastdaily TYPE TIMESTAMP
+    USING lastdaily::TIMESTAMP;
+
+ALTER TABLE public."Relationship"
+ALTER COLUMN lastspeak TYPE TIMESTAMP
+USING lastspeak::TIMESTAMP,
+ALTER COLUMN lastgift TYPE TIMESTAMP
+USING lastgift::TIMESTAMP;

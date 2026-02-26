@@ -12,7 +12,7 @@ module.exports = async(interaction, client) => {
 
         const relationsResult = await pool.query(`
             SELECT p.id AS pnj_id, p.name, COALESCE(r.hearts, 0) AS hearts, COALESCE(r.xp_hearts, 0) AS xp_hearts,
-                i.url AS icon
+                i.discordEmote AS icon
             FROM pnj p LEFT JOIN relationship r 
                 ON r.pnj_id = p.id AND r.user_id = $1
             LEFT JOIN image i ON i.ref_id = p.id AND i.type = 'pnj'
@@ -22,9 +22,10 @@ module.exports = async(interaction, client) => {
         const relations = relationsResult.rows;
 
         // Afficher tous les PNJ dans un seul embed en excluant certains noms
-        const excluded = ['pierre', 'willy', 'clint'];
+        const excluded = ['pierre', 'willy', 'clint', 'caroline', 'demetrius', 'dwarf', 'evelyn', 
+            'george', 'jas', 'jodi', 'kent', 'krobus', 'lewis', 'linus', 'marnie', 'pam', 'robin', 
+            'sandy', 'vincent', 'wizard', 'morris', 'marlon', 'leo', 'gus'];
         const filtered = relations.filter(r => r && r.name && !excluded.includes(r.name.toLowerCase()));
-
         // Emojis personnalisés pour les coeurs (relations) avec les pnjs
         const heartsemojis = {
             0: '<:pinkheart:1476168572123217971>',
@@ -60,7 +61,7 @@ module.exports = async(interaction, client) => {
 
         const embed = new EmbedBuilder()
             .setTitle(`Vos relations ${grayheart}`)
-            .setColor('#8b5cf6')
+            .setColor(0x8b5cf6)
             .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png', size: 64 }))
             .setTimestamp();
 

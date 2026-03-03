@@ -20,7 +20,7 @@ const weathers = ["sunny", "rainy", "windy", "stormy", "snowy"];
 const seasons = ["spring", "summer", "fall", "winter"];
 
 // Changer la météo tous les jours à 6h du matin
-function schedulDailyWeatherUpdate() {
+function scheduleDailyWeatherUpdate() {
   const now = new Date();
   const next = new Date();
   next.setHours(6, 0, 0, 0);
@@ -92,36 +92,62 @@ async function updateWeather() {
   console.log(`🌤️ Météo mise à jour : ${chosenWeather}`);
 }
 
-schedulDailyWeatherUpdate();
-
 // Changer la saison le 1er de chaque mois à 6h du matin
+let seasonTimer;
+
 function scheduleMonthlySeasonUpdate() {
+  if (seasonTimer) clearTimeout(seasonTimer);
+
   const now = new Date();
-  const next = new Date();
-  next.setMonth(now.getMonth() +1);
-  next.setDate(1);
+
+  // prochain 1er du mois à 06:00
+  const next = new Date(now);
+  next.setMonth(now.getMonth() + 1, 1);
   next.setHours(6, 0, 0, 0);
 
-  const delay = next - now;
+  let delay = next.getTime() - now.getTime();
 
-  setTimeout(() => {
-    updateSeason();
-    setInterval(updateSeason, 30 * 24 * 60 * 60 * 1000); // Tous les 30 jours
+  // Limite Node ~ 2^31-1 ms ≈ 24.8 jours
+  const MAX_TIMEOUT = 2_147_483_647;
+
+  if (delay > MAX_TIMEOUT) {
+    // Trop long → on se réveille dans 1h et on recalculera
+    seasonTimer = setTimeout(scheduleMonthlySeasonUpdate, 60 * 60 * 1000);
+    return;
+  }
+
+  seasonTimer = setTimeout(async () => {
+    try {
+      await updateSeason();
+    } finally {
+      scheduleMonthlySeasonUpdate(); // replanifie pour le mois suivant
+    }
   }, delay);
 }
 
 async function updateSeason() {
-   const result = await pool.query('SELECT season FROM world_state WHERE id = 1');
-   const current = result.rows[0].season;
-   const next = seasons[(seasons.indexOf(current) + 1) % seasons.length];
-   await pool.query(`
-     UPDATE world_state SET season = $1, last_season_update = NOW()
-     WHERE id = 1
-   `, [next]);
-   console.log(`🍂 Saison mise à jour : ${next}`);
-}
+  const result = await pool.query(`
+    SELECT season, last_season_update AS "lastSeasonUpdate"
+    FROM world_state
+    WHERE id = 1
+  `);
 
-scheduleMonthlySeasonUpdate();
+  const { season, lastSeasonUpdate } = result.rows[0];
+  const now = new Date();
+  const last = lastSeasonUpdate ? new Date(lastSeasonUpdate) : null;
+
+  if (last && last.getFullYear() === now.getFullYear() && last.getMonth() === now.getMonth()) return;
+
+  const next = seasons[(seasons.indexOf(season) + 1) % seasons.length];
+
+  await pool.query(`
+    UPDATE world_state
+    SET season = $1, last_season_update = NOW()
+    WHERE id = 1
+  `, [next]);
+
+  console.log(`🍂 Saison mise à jour : ${next}`);
+}
 
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
@@ -137,16 +163,19 @@ for (const file of commandFiles) {
 // Quand le bot est prêt
 client.once(Events.ClientReady, c => {
   console.log(`🌾 StardewBot connecté en tant que ${c.user.tag}`);
+
+  scheduleMonthlySeasonUpdate();
+  scheduleDailyWeatherUpdate();
 });
 
 // Gestion des interactions (slash commands)
 client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isButton()) {
-    if (interaction.customId === 'relations' || interaction.customId.startsWith('relations_page_')) {
+    if (interaction.customId === 'relations' || interaction.customId.startsWith('relations_page_') || interaction.customId.startsWith('relations_')) {
       return require('./interactions/relations')(interaction, client);
     }
-    if (interaction.customId === 'back_to_profile') { 
-      return require('./commands/profil').execute(interaction); }
+    if (interaction.customId.startsWith('back_to_profile_')) { 
+      return require('./commands/profil').execute(interaction, client); }
   }
 
   if (!interaction.isChatInputCommand()) return;
@@ -159,7 +188,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 
   try {
-    await command.execute(interaction);
+    await command.execute(interaction, client);
   } catch (error) {
     console.error(error);
     await interaction.reply({

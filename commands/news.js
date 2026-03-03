@@ -14,8 +14,14 @@ module.exports = {
         const { season, weather } = world.rows[0];
 
         // Récupérer le daily
-        const user = await pool.query('SELECT lastDaily FROM "User" WHERE discordid = $1', [userId]);
-        const lastDaily = user.rows[0]?.lastDaily;
+        const user = await pool.query('SELECT id, lastdaily FROM "User" WHERE discordid = $1', [userId]);
+
+        // S'il n'a pas de profil, lui dire de faire /start
+        if (!user.rows.length) {
+            return interaction.reply({ content: "❌ Vous n'avez pas encore de profil. Utilisez **/start** pour en créer un.", ephemeral: true });
+        }
+        
+        const lastDaily = user.rows[0]?.lastdaily;
 
         // Date du jour 
         const now = new Date();
@@ -62,15 +68,12 @@ module.exports = {
         };
 
         // Daily
-        let dailyMessage = "";
-        if (!lastDaily) {
-            dailyMessage = "Votre daily est disponible ! Utilisez la commande /daily.";
-        } else {
-            const remaining = getDailyRemaining(new Date(lastDaily).getTime());
-            dailyMessage = remaining 
-                ? `Votre daily sera disponible dans ${formatDuration(remaining)}.`
-                : "Votre daily est disponible ! Utilisez la commande /daily.";
-        }
+        let dailyMessage;
+        const remaining = getDailyRemaining(lastDaily); // lastDaily is a Date/string or null
+
+        dailyMessage = remaining
+        ? `⏳ Daily déjà récupéré. Revenez dans **${remaining}**.`
+        : "✅ Daily disponible ! Vous pouvez utiliser la commande **/daily**.";
 
         const embed = new EmbedBuilder()
             .setTitle('📰  Nouvelles du jour bonjour')
@@ -90,24 +93,23 @@ module.exports = {
 };
 
 function getDailyRemaining(lastDaily) {
-    if (!lastDaily) return null;
-    const now = new Date();
-    const last = new Date(lastDaily);
+  if (!lastDaily) return null;
 
-    // if the user already claimed today, compute time until next midnight
-    if (last.toDateString() === now.toDateString()) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0);
-        const diff = tomorrow - now;
-        if (diff <= 0) return null;
+  const now = new Date();
+  const last = new Date(lastDaily);
 
-        const hours = Math.floor(diff / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  if (last.toDateString() !== now.toDateString()) return null;
 
-        return `${hours}h ${minutes}m ${seconds}s`;
-    }
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
 
-    return null;
+  const diff = tomorrow - now;
+  if (diff <= 0) return null;
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+  return `${hours}h ${minutes}m ${seconds}s`;
 }

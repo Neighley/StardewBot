@@ -2,13 +2,17 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const pool = require('../db');
 
 module.exports = async(interaction, client) => {
-    // customId peut être : 'relations' (initial) ou 'relations_page_<page>_<uid>'
-    const invokingUserId = interaction.user.id;
+    // customId peut être : 'relations_<discordId>'
+    // Extraire l'ID de l'utilisateur cible du customId
+    const targetDiscordId = interaction.customId.split('_')[1];
 
     try {
         // Récupère l'utilisateur 'User' en base
-        const userResult = await pool.query('SELECT * FROM "User" WHERE discordid = $1', [invokingUserId]);
+        const userResult = await pool.query('SELECT * FROM "User" WHERE discordid = $1', [targetDiscordId]);
         const user = userResult.rows[0];
+
+        // Récupère l'utilisateur Discord pour le bon avatar
+        const discordUser = await client.users.fetch(targetDiscordId);
 
         const relationsResult = await pool.query(`
             SELECT p.id AS pnj_id, p.name, COALESCE(r.hearts, 0) AS hearts, COALESCE(r.xp_hearts, 0) AS xp_hearts,
@@ -62,7 +66,7 @@ module.exports = async(interaction, client) => {
         const embed = new EmbedBuilder()
             .setTitle(`Vos relations ${grayheart}`)
             .setColor(0x8b5cf6)
-            .setThumbnail(interaction.user.displayAvatarURL({ extension: 'png', size: 64 }))
+            .setThumbnail(discordUser.displayAvatarURL({ extension: 'png', size: 512 }))
             .setTimestamp();
 
         if (filtered.length === 0) {
@@ -92,10 +96,10 @@ module.exports = async(interaction, client) => {
             });
         }
 
-        // Simple bouton Retour
+        // Simple bouton Retour avec l'ID de l'utilisateur cible
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('back_to_profile')
+                .setCustomId(`back_to_profile_${targetDiscordId}`)
                 .setLabel('Retour')
                 .setStyle(ButtonStyle.Secondary)
         );

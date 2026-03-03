@@ -12,6 +12,14 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        const userId = interaction.user.id;
+        // Récupérer les informations utilisateur
+        const user = await pool.query('SELECT id, money, lastdaily FROM "User" WHERE discordid = $1', [userId]);
+        // S'il n'a pas de profil, lui dire de faire /start
+        if (!user.rows.length) {
+            return interaction.reply({ content: "❌ Vous n'avez pas encore de profil. Utilisez **/start** pour en créer un.", ephemeral: true });
+        }
+
         const pnjName = interaction.options.getString('pnj').toLowerCase();
 
         const pnj = await pool.query('SELECT * FROM pnj WHERE LOWER(name) = $1', [pnjName]);

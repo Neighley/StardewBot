@@ -10,18 +10,37 @@ module.exports = {
                 .setDescription('L\'utilisateur dont vous voulez voir le profil')
                 .setRequired(false)),
 
-    async execute(interaction) {
+    async execute(interaction, client) {
+        // Récupérer les informations utilisateur
+        const userId = interaction.user.id;
+        const user = await pool.query('SELECT id, money, lastdaily FROM "User" WHERE discordid = $1', [userId]);
+        // S'il n'a pas de profil, lui dire de faire /start
+        if (!user.rows.length) {
+            return interaction.reply({ content: "❌ Vous n'avez pas encore de profil. Utilisez **/start** pour en créer un.", ephemeral: true });
+        }
+
         // Pour les slash commands: récupérer l'utilisateur de l'option
-        // Pour les boutons: utiliser l'utilisateur actuel
-        const targetUser = interaction.isChatInputCommand() 
-            ? (interaction.options.getUser('utilisateur') || interaction.user)
-            : interaction.user;
-        const discordId = targetUser.id;
+        // Pour les boutons: extraire l'utilisateur du customId (format: back_to_profile_<discordId>)
+        let targetUser;
+        let discordId;
+        
+        if (interaction.isChatInputCommand()) {
+            targetUser = interaction.options.getUser('utilisateur') || interaction.user;
+            discordId = targetUser.id;
+        } else if (interaction.isMessageComponent() && interaction.customId.startsWith('back_to_profile_')) {
+            // Extraire l'ID depuis back_to_profile_<discordId>
+            discordId = interaction.customId.split('_')[3];
+            // On ne peut pas recuperer le username depuis profil.js, on le récupèrera depuis la bdd
+            targetUser = null;
+        } else {
+            targetUser = interaction.user;
+            discordId = targetUser.id;
+        }
 
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('relations')
+                    .setCustomId(`relations_${discordId}`)
                     .setLabel('Voir les relations')
                     .setStyle(ButtonStyle.Primary)
             );
@@ -57,10 +76,21 @@ module.exports = {
             const lastDailyStr = formatLastDaily(lastdaily);
             const creationStr = formatCreationDate(user.createdat);
 
+            // Si targetUser est null (vient d'un bouton back), récupérer depuis Discord
+            let displayUser = targetUser;
+            if (!displayUser && client) {
+                try {
+                    displayUser = await client.users.fetch(discordId);
+                } catch (e) {
+                    console.error('Erreur lors de la récupération du profil Discord:', e);
+                    displayUser = { username: 'Utilisateur inconnu', displayAvatarURL: () => '' };
+                }
+            }
+
             const embed = new EmbedBuilder()
-                .setTitle(`Profil de ${targetUser.username}`)
+                .setTitle(`Profil de ${displayUser?.username || 'Utilisateur inconnu'}`)
                 .setColor(0xae8af7)
-                .setThumbnail(targetUser.displayAvatarURL({ extension: 'png', size: 128 }))
+                .setThumbnail(displayUser?.displayAvatarURL({ extension: 'png', size: 512 }) || '')
                 .addFields(
                     { name: 'Argent', value: `${user.money} <:coin:1476599428835053629>`, inline: true },
                     { name: 'Dernier daily', value: lastDailyStr, inline: true },
